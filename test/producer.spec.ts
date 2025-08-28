@@ -158,6 +158,7 @@ describe('producer', () => {
       await producer.enqueue(queueName, jobData2);
 
       const scannedJobs: any[] = [];
+
       await producer.scanQueue(queueName, async (job) => {
         scannedJobs.push(job);
       });
@@ -176,6 +177,7 @@ describe('producer', () => {
       await redis.zadd(`xque:pending:${queueName}`, Date.now() + 1000, jobId);
 
       const scannedJobs: any[] = [];
+
       await producer.scanPending(queueName, async (job) => {
         scannedJobs.push(job);
       });
@@ -196,6 +198,7 @@ describe('producer', () => {
       await redis.zadd(`xque:pending:${queueName}`, Date.now() + 1000, pendingJobId);
 
       const scannedJobs: any[] = [];
+
       await producer.scan(queueName, async (job) => {
         scannedJobs.push(job);
       });
