@@ -106,7 +106,7 @@ export function createConsumer(
     const parsedJob = JSON.parse(job);
 
     try {
-      await fn(parsedJob.data);
+      await fn(parsedJob);
       await deleteJob(parsedJob);
     } catch (error) {
       logger.error('Job execution error', error);
