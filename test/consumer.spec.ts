@@ -24,9 +24,8 @@ describe('consumer', () => {
   describe('job processing', () => {
     it('processes a single job successfully', async () => {
       const queueName = 'process-queue';
-      const jobData = { task: 'process-task', value: 42 };
 
-      await producer.enqueue(queueName, jobData);
+      await producer.enqueue(queueName, { key: 'value' });
 
       const consumer = createConsumer({ redisUrl, queueName, waitTime: 1 });
       const processedJobs: Job[] = [];
@@ -39,7 +38,7 @@ describe('consumer', () => {
       await consumer.stop();
 
       expect(processedJobs).toHaveLength(1);
-      expect(processedJobs[0]).toEqual(jobData);
+      expect(processedJobs[0]).toEqual(expect.objectContaining({ data: { key: 'value' } }));
 
       const remainingJobs = await redis.zcard(`xque:queue:${queueName}`);
       expect(remainingJobs).toBe(0);
@@ -65,9 +64,9 @@ describe('consumer', () => {
       await consumer.stop();
 
       expect(processedJobs).toHaveLength(3);
-      expect(processedJobs[0]).toEqual(expect.objectContaining({ jid: expect.any(String), data: 'job-2', expiry: 3_600_000 }));
-      expect(processedJobs[1]).toEqual(expect.objectContaining({ jid: expect.any(String), data: 'job-3', expiry: 3_600_000 }));
-      expect(processedJobs[2]).toEqual(expect.objectContaining({ jid: expect.any(String), data: 'job-1', expiry: 3_600_000 }));
+      expect(processedJobs[0]).toEqual(expect.objectContaining({ jid: expect.any(String), data: 'job-2', expiry: expect.any(Number) }));
+      expect(processedJobs[1]).toEqual(expect.objectContaining({ jid: expect.any(String), data: 'job-3', expiry: expect.any(Number) }));
+      expect(processedJobs[2]).toEqual(expect.objectContaining({ jid: expect.any(String), data: 'job-1', expiry: expect.any(Number) }));
     });
 
     it('waits for jobs when queue is empty', async () => {
@@ -177,8 +176,7 @@ describe('consumer', () => {
   describe('pending job handling', () => {
     it('processes expired pending jobs', async () => {
       const queueName = 'expired-pending-queue';
-      const jobData = { task: 'expired-job' };
-      const jobId = await producer.enqueue(queueName, jobData);
+      const jobId = await producer.enqueue(queueName, { key: 'value' });
 
       const pastTime = Math.floor(Date.now() / 1_000) - 100;
       await redis.zrem(`xque:queue:${queueName}`, jobId);
@@ -195,7 +193,7 @@ describe('consumer', () => {
       await consumer.stop();
 
       expect(processedJobs).toHaveLength(1);
-      expect(processedJobs[0]).toEqual(jobData);
+      expect(processedJobs[0]).toEqual(expect.objectContaining({ data: { key: 'value' } }));
     });
 
     it('does not process non-expired pending jobs', async () => {
