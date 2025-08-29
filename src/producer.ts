@@ -37,7 +37,7 @@ export async function createProducer({ redisUrl, commandTimeout = 1_000 }: { red
     return (await queueSize(queueName)) + (await pendingSize(queueName));
   }
 
-  async function findJob(queueName: string, jid: string) {
+  async function findJob(jid: string) {
     const job = await redis.hget('xque:jobs', jid);
 
     return job ? JSON.parse(job) : null;

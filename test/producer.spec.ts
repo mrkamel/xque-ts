@@ -120,7 +120,7 @@ describe('producer', () => {
       const jobData = { task: 'findable-task', id: 123 };
       const jobId = await producer.enqueue(queueName, jobData);
 
-      const foundJob = await producer.findJob(queueName, jobId);
+      const foundJob = await producer.findJob(jobId);
       expect(foundJob).toBeDefined();
       expect(foundJob!.jid).toBe(jobId);
       expect(foundJob!.data).toEqual(jobData);
