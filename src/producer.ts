@@ -17,6 +17,7 @@ export async function createProducer({ redisUrl, commandTimeout = 1_000 }: { red
       local score = -priority * (2^50) + sequence_number
 
       redis.call('zadd', 'xque:queue:' .. queue_name, score, jid)
+      redis.call('lpush', 'xque:notifications:' .. queue_name, 1)
     `;
 
     await redis.eval(enqueueScript, 0, [queueName, job.jid, JSON.stringify(job), priority.toString()]);

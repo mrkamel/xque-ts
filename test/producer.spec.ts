@@ -38,6 +38,9 @@ describe('producer', () => {
 
       const queueSize = await redis.zcard(`xque:queue:${queueName}`);
       expect(queueSize).toBe(1);
+
+      const notificationsSize = await redis.llen(`xque:notifications:${queueName}`);
+      expect(notificationsSize).toBe(1);
     });
 
     it('enqueues a job with custom expiry and priority', async () => {

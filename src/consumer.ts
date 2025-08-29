@@ -109,7 +109,7 @@ export function createConsumer(
       await fn(parsedJob);
       await deleteJob(parsedJob);
     } catch (error) {
-      logger.error('Job execution error', error);
+      logger.error({ message: 'Job execution error', error: error?.message, stack: error?.stack });
 
       await backoffJob(parsedJob);
     }
@@ -126,7 +126,7 @@ export function createConsumer(
 
       await executeJob(job, fn);
     } catch (error) {
-      logger.error('Queue processing error', error);
+      logger.error({ message: 'Queue processing error', error: error?.message, stack: error?.stack });
 
       await Promise.any([stopPromise, sleep(SLEEP_INTERVAL)]);
     }
