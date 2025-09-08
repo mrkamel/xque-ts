@@ -1,16 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createProducer } from '../src/producer';
-import { Redis } from 'ioredis';
+import { Redis, RedisOptions } from 'ioredis';
 
 describe('producer', () => {
   let producer: Awaited<ReturnType<typeof createProducer>>;
   let redis: Redis;
 
   beforeEach(async () => {
-    const redisUrl = 'redis://localhost:6379/1';
+    const redisConfig: RedisOptions = { db: 1 };
 
-    producer = await createProducer({ redisUrl });
-    redis = new Redis(redisUrl);
+    producer = await createProducer({ redisConfig });
+    redis = new Redis(redisConfig);
   });
 
   afterEach(async () => {
@@ -128,7 +128,7 @@ describe('producer', () => {
 
     it('returns null for non-existent job', async () => {
       const queueName = 'empty-queue';
-      const foundJob = await producer.findJob(queueName, 'non-existent-id');
+      const foundJob = await producer.findJob('non-existent-id');
       expect(foundJob).toBeNull();
     });
 

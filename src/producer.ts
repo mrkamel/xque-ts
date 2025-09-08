@@ -1,9 +1,9 @@
-import { Redis } from 'ioredis';
+import { Redis, RedisOptions } from 'ioredis';
 import { v7 as timeUuid } from 'uuid';
 import { Job } from './types';
 
-export async function createProducer({ redisUrl, commandTimeout = 1_000 }: { redisUrl: string, commandTimeout?: number }) {
-  const redis = new Redis(redisUrl, { commandTimeout });
+export async function createProducer({ redisConfig, commandTimeout = 1_000 }: { redisConfig: RedisOptions, commandTimeout?: number }) {
+  const redis = new Redis({ commandTimeout, ...redisConfig });
 
   async function enqueue(queueName: string, data: any, { expiry = 3_600_000, priority = 0 }: { expiry?: number, priority?: number } = {}) {
     const job: Job = { jid: timeUuid(), expiry, data };
