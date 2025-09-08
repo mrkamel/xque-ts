@@ -1,4 +1,4 @@
-import { Redis } from 'ioredis';
+import { Redis, RedisOptions } from 'ioredis';
 import { Job, Logger } from './types';
 import { sleep } from './utils';
 
@@ -7,10 +7,10 @@ const DEFAULT_BACKOFF = 60_000;
 const COMMAND_TIMEOUT = 30_000;
 
 export function createConsumer(
-  { redisUrl, queueName, waitTime = 5_000, retries = 3, backoffs = [30_000, 90_000, 270_000], logger = console }:
-  { redisUrl: string; queueName: string, waitTime?: number, retries?: number, backoffs?: number[], logger?: Logger }
+  { redisConfig, queueName, waitTime = 5_000, retries = 3, backoffs = [30_000, 90_000, 270_000], logger = console }:
+  { redisConfig: RedisOptions; queueName: string, waitTime?: number, retries?: number, backoffs?: number[], logger?: Logger }
 ) {
-  const redis = new Redis(redisUrl, { commandTimeout: COMMAND_TIMEOUT });
+  const redis = new Redis({ commandTimeout: COMMAND_TIMEOUT, ...redisConfig });
   let resolveStopPromise: (value: boolean | PromiseLike<boolean>) => void;
   let stopped = false;
 
@@ -19,7 +19,7 @@ export function createConsumer(
   });
 
   async function brpopNotification() {
-    const blockingRedis = new Redis(redisUrl, { commandTimeout: COMMAND_TIMEOUT });
+    const blockingRedis = new Redis({ commandTimeout: COMMAND_TIMEOUT, ...redisConfig });
 
     try {
       await blockingRedis.brpop(`xque:notifications:${queueName}`, waitTime / 1_000);

@@ -1,18 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createConsumer } from '../src/consumer';
 import { createProducer } from '../src/producer';
-import { Redis } from 'ioredis';
+import { Redis, RedisOptions } from 'ioredis';
 import { sleep } from '../src/utils';
 import { Job } from '../src/types';
 
 describe('consumer', () => {
   let redis: Redis;
   let producer: Awaited<ReturnType<typeof createProducer>>;
-  const redisUrl = 'redis://localhost:6379/1';
+  const redisConfig: RedisOptions = { db: 1 };
 
   beforeEach(async () => {
-    redis = new Redis(redisUrl);
-    producer = await createProducer({ redisUrl, commandTimeout: 100 });
+    redis = new Redis(redisConfig);
+    producer = await createProducer({ redisConfig, commandTimeout: 100 });
   });
 
   afterEach(async () => {
@@ -27,7 +27,7 @@ describe('consumer', () => {
 
       await producer.enqueue(queueName, { key: 'value' });
 
-      const consumer = createConsumer({ redisUrl, queueName, waitTime: 1 });
+      const consumer = createConsumer({ redisConfig, queueName, waitTime: 1 });
       const processedJobs: Job[] = [];
 
       const jobProcessor = async (job: Job) => {
@@ -51,7 +51,7 @@ describe('consumer', () => {
       await producer.enqueue(queueName, 'job-2', { priority: 5 });
       await producer.enqueue(queueName, 'job-3', { priority: 3 });
 
-      const consumer = createConsumer({ redisUrl, queueName, waitTime: 1 });
+      const consumer = createConsumer({ redisConfig, queueName, waitTime: 1 });
       const processedJobs: Job[] = [];
 
       const jobProcessor = async (job: Job) => {
@@ -70,7 +70,7 @@ describe('consumer', () => {
     });
 
     it('waits for jobs when queue is empty', async () => {
-      const consumer = createConsumer({ redisUrl, queueName: 'empty-wait-queue', waitTime: 1 });
+      const consumer = createConsumer({ redisConfig, queueName: 'empty-wait-queue', waitTime: 1 });
       const processedJobs: Job[] = [];
 
       const jobProcessor = async (job: Job) => {
@@ -92,7 +92,7 @@ describe('consumer', () => {
       await producer.enqueue(queueName, jobData);
 
       const consumer = createConsumer({
-        redisUrl,
+        redisConfig,
         queueName,
         retries: 2,
         backoffs: [50, 100],
@@ -137,7 +137,7 @@ describe('consumer', () => {
       };
 
       const consumer = createConsumer({
-        redisUrl,
+        redisConfig,
         queueName,
         retries: 2,
         backoffs: [50, 100],
@@ -182,7 +182,7 @@ describe('consumer', () => {
       await redis.zrem(`xque:queue:${queueName}`, jobId);
       await redis.zadd(`xque:pending:${queueName}`, pastTime, jobId);
 
-      const consumer = createConsumer({ redisUrl, queueName, retries: 3 });
+      const consumer = createConsumer({ redisConfig, queueName, retries: 3 });
       const processedJobs: Job[] = [];
 
       const jobProcessor = async (job: Job) => {
@@ -205,7 +205,7 @@ describe('consumer', () => {
       await redis.zrem(`xque:queue:${queueName}`, jobId);
       await redis.zadd(`xque:pending:${queueName}`, futureTime, jobId);
 
-      const consumer = createConsumer({ redisUrl, queueName, waitTime: 1 });
+      const consumer = createConsumer({ redisConfig, queueName, waitTime: 1 });
       const processedJobs: Job[] = [];
 
       await consumer.runOnce(async (job: Job) => {
@@ -229,7 +229,7 @@ describe('consumer', () => {
         error: vi.fn()
       };
 
-      const consumer = createConsumer({ redisUrl, queueName, retries: 0, logger });
+      const consumer = createConsumer({ redisConfig, queueName, retries: 0, logger });
       let jobCount = 0;
       const processedJobs: Job[] = [];
 
@@ -253,7 +253,7 @@ describe('consumer', () => {
 
   describe('stop functionality', () => {
     it('stops gracefully when called', async () => {
-      const consumer = createConsumer({ redisUrl, queueName: 'stop-queue', retries: 3 });
+      const consumer = createConsumer({ redisConfig, queueName: 'stop-queue', retries: 3 });
 
       const runPromise = consumer.run(async (job: Job) => {
         await sleep(100);
@@ -270,7 +270,7 @@ describe('consumer', () => {
     });
 
     it('stops while waiting for jobs', async () => {
-      const consumer = createConsumer({ redisUrl, queueName: 'stop-while-waiting-queue', retries: 3 });
+      const consumer = createConsumer({ redisConfig, queueName: 'stop-while-waiting-queue', retries: 3 });
 
       const runPromise = consumer.run(async (job: Job) => {
         // Won't be called
