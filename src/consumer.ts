@@ -12,10 +12,16 @@ export function createConsumer(
 ) {
   const redis = new Redis({ commandTimeout: COMMAND_TIMEOUT, ...redisConfig });
   let resolveStopPromise: (value: boolean | PromiseLike<boolean>) => void;
+  let resolveStoppedPromise: (value: boolean | PromiseLike<boolean>) => void;
   let stopped = false;
+  let running = false;
 
   const stopPromise = new Promise((resolve) => {
     resolveStopPromise = resolve;
+  });
+
+  let stoppedPromise = new Promise((resolve) => {
+    resolveStoppedPromise = resolve;
   });
 
   async function brpopNotification() {
@@ -116,6 +122,8 @@ export function createConsumer(
   }
 
   async function runOnce(fn: (job: Job) => Promise<void>) {
+    running = true;
+
     try {
       const job = await dequeue();
 
@@ -129,6 +137,10 @@ export function createConsumer(
       logger.error({ message: 'Queue processing error', error: error?.message, stack: error?.stack });
 
       await Promise.any([stopPromise, sleep(SLEEP_INTERVAL)]);
+    } finally {
+      running = false;
+
+      if (stopped) resolveStoppedPromise(true);
     }
   }
 
@@ -142,7 +154,7 @@ export function createConsumer(
     stopped = true;
     resolveStopPromise(true);
 
-    await stopPromise;
+    if (running) await stoppedPromise;
     await redis.quit();
   }
 

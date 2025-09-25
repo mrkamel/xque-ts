@@ -285,5 +285,40 @@ describe('consumer', () => {
 
       expect(stopDuration).toBeLessThan(100);
     });
+
+    it('completes running job before stopping', async () => {
+      const queueName = 'complete-before-stop';
+      const consumer = createConsumer({ redisConfig, queueName });
+
+      await producer.enqueue(queueName, { task: 'job' });
+
+      let jobStarted = false;
+      let jobCompleted = false;
+
+      const runPromise = consumer.run(async (job: Job) => {
+        jobStarted = true;
+        await sleep(200);
+        jobCompleted = true;
+      });
+
+      await sleep(50);
+
+      expect(jobStarted).toBe(true);
+      expect(jobCompleted).toBe(false);
+
+      const stopStart = Date.now();
+      await consumer.stop();
+      await runPromise;
+      const stopDuration = Date.now() - stopStart;
+
+      expect(jobCompleted).toBe(true);
+      expect(stopDuration).toBeGreaterThanOrEqual(150);
+
+      const remainingJobs = await redis.zcard(`xque:queue:${queueName}`);
+      const pendingJobs = await redis.zcard(`xque:pending:${queueName}`);
+
+      expect(remainingJobs).toBe(0);
+      expect(pendingJobs).toBe(0);
+    });
   });
 });
