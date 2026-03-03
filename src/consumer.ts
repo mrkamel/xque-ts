@@ -28,14 +28,14 @@ export function createConsumer(
     const blockingRedis = new Redis({ commandTimeout: COMMAND_TIMEOUT, ...redisConfig });
 
     try {
-      await blockingRedis.brpop(`xque:notifications:${queueName}`, waitTime / 1_000);
+      await Promise.any([blockingRedis.brpop(`xque:notifications:${queueName}`, waitTime / 1_000), sleep(waitTime + 1_000)]);
     } finally {
       blockingRedis.disconnect();
     }
   }
 
   async function waitForNotification() {
-    await Promise.any([stopPromise, brpopNotification(), sleep(waitTime)]);
+    await Promise.any([stopPromise, brpopNotification()]);
   }
 
   async function dequeue(): Promise<string | null> {
