@@ -28,7 +28,7 @@ export function createConsumer(
     const blockingRedis = new Redis({ commandTimeout: COMMAND_TIMEOUT, ...redisConfig });
 
     try {
-      await blockingRedis.brpop(`xque:notifications:${queueName}`, waitTime / 1_000);
+      await Promise.any([blockingRedis.brpop(`xque:notifications:${queueName}`, waitTime / 1_000), sleep(waitTime + 1_000)]);
     } finally {
       blockingRedis.disconnect();
     }

@@ -82,6 +82,25 @@ describe('consumer', () => {
 
       expect(processedJobs).toHaveLength(0);
     });
+
+    it('wakes up within waitTime even without notification', async () => {
+      const waitTime = 100;
+      const consumer = createConsumer({ redisConfig, queueName: 'waittime-fallback-queue', waitTime });
+      const processedJobs: Job[] = [];
+
+      const jobProcessor = async (job: Job) => {
+        processedJobs.push(job);
+      };
+
+      const startTime = Date.now();
+      await consumer.runOnce(jobProcessor);
+      const elapsed = Date.now() - startTime;
+      await consumer.stop();
+
+      expect(processedJobs).toHaveLength(0);
+      expect(elapsed).toBeGreaterThanOrEqual(waitTime - 10);
+      expect(elapsed).toBeLessThan(waitTime + 1500);
+    });
   });
 
   describe('retry logic', () => {
