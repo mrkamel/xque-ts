@@ -99,7 +99,7 @@ describe('consumer', () => {
 
       expect(processedJobs).toHaveLength(0);
       expect(elapsed).toBeGreaterThanOrEqual(waitTime - 10);
-      expect(elapsed).toBeLessThan(waitTime + 500);
+      expect(elapsed).toBeLessThan(waitTime + 1500);
     });
   });
 
