@@ -35,7 +35,7 @@ export function createConsumer(
   }
 
   async function waitForNotification() {
-    await Promise.any([stopPromise, brpopNotification()]);
+    await Promise.any([stopPromise, brpopNotification(), sleep(waitTime)]);
   }
 
   async function dequeue(): Promise<string | null> {
