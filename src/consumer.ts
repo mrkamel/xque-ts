@@ -11,6 +11,7 @@ export function createConsumer(
   { redisConfig: RedisOptions; queueName: string, waitTime?: number, retries?: number, backoffs?: number[], logger?: Logger }
 ) {
   const redis = new Redis({ commandTimeout: COMMAND_TIMEOUT, ...redisConfig });
+  const prefix = redisConfig.keyPrefix || '';
   let resolveStopPromise: (value: boolean | PromiseLike<boolean>) => void;
   let resolveStoppedPromise: (value: boolean | PromiseLike<boolean>) => void;
   let stopped = false;
@@ -40,21 +41,21 @@ export function createConsumer(
 
   async function dequeue(): Promise<string | null> {
     const dequeueScript = `
-      local queue_name = ARGV[1]
+      local prefix, queue_name = ARGV[1], ARGV[2]
 
-      local zitem = redis.call('zrange', 'xque:pending:' .. queue_name, 0, 0, 'WITHSCORES')
+      local zitem = redis.call('zrange', prefix .. 'xque:pending:' .. queue_name, 0, 0, 'WITHSCORES')
       local job_id = zitem[1]
 
       local time = redis.call('time')
       local time_float = tonumber(time[1]) + (tonumber(time[2]) / 1e6)
 
       if not zitem[2] or tonumber(zitem[2]) > time_float then
-        job_id = redis.call('zpopmin', 'xque:queue:' .. queue_name)[1]
+        job_id = redis.call('zpopmin', prefix .. 'xque:queue:' .. queue_name)[1]
       end
 
       if not job_id then return nil end
 
-      local job = redis.call('hget', 'xque:jobs', job_id)
+      local job = redis.call('hget', prefix .. 'xque:jobs', job_id)
 
       if not job then return nil end
 
@@ -63,23 +64,23 @@ export function createConsumer(
       time = redis.call('time')
       time_float = tonumber(time[1]) + (tonumber(time[2]) / 1e6)
 
-      redis.call('zadd', 'xque:pending:' .. queue_name, time_float + (object['expiry'] / 1e3), job_id)
+      redis.call('zadd', prefix .. 'xque:pending:' .. queue_name, time_float + (object['expiry'] / 1e3), job_id)
 
       return job
     `;
 
-    return await redis.eval(dequeueScript, 0, [queueName]) as string | null;
+    return await redis.eval(dequeueScript, 0, [prefix, queueName]) as string | null;
   }
 
   async function deleteJob(parsedJob: Job) {
     const deleteScript = `
-      local queue_name, job_id = ARGV[1], ARGV[2]
+      local prefix, queue_name, job_id = ARGV[1], ARGV[2], ARGV[3]
 
-      redis.call('hdel', 'xque:jobs', job_id)
-      redis.call('zrem', 'xque:pending:' .. queue_name, job_id)
+      redis.call('hdel', prefix .. 'xque:jobs', job_id)
+      redis.call('zrem', prefix .. 'xque:pending:' .. queue_name, job_id)
     `;
 
-    return await redis.eval(deleteScript, 0, [queueName, parsedJob.jid]); 
+    return await redis.eval(deleteScript, 0, [prefix, queueName, parsedJob.jid]);
   }
 
   async function backoffJob(parsedJob: Job) {
@@ -95,17 +96,17 @@ export function createConsumer(
     const updatedJob = JSON.stringify({ ...parsedJob, errors });
 
     const backoffScript = `
-      local queue_name, job_id, job, backoff = ARGV[1], ARGV[2], ARGV[3], tonumber(ARGV[4])
+      local prefix, queue_name, job_id, job, backoff = ARGV[1], ARGV[2], ARGV[3], ARGV[4], tonumber(ARGV[5])
 
       local time = redis.call('time')
       local time_float = tonumber(time[1]) + (tonumber(time[2]) / 1e6)
 
-      redis.call('hset', 'xque:jobs', job_id, job)
-      redis.call('zrem', 'xque:pending:' .. queue_name, job_id)
-      redis.call('zadd', 'xque:pending:' .. queue_name, time_float + (backoff / 1e3), job_id)
+      redis.call('hset', prefix .. 'xque:jobs', job_id, job)
+      redis.call('zrem', prefix .. 'xque:pending:' .. queue_name, job_id)
+      redis.call('zadd', prefix .. 'xque:pending:' .. queue_name, time_float + (backoff / 1e3), job_id)
     `;
 
-    return await redis.eval(backoffScript, 0, [queueName, parsedJob.jid, updatedJob, backoff.toString()]);
+    return await redis.eval(backoffScript, 0, [prefix, queueName, parsedJob.jid, updatedJob, backoff.toString()]);
   }
 
   async function executeJob(job: string, fn: (job: Job) => Promise<void>) {

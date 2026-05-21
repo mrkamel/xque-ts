@@ -34,9 +34,25 @@ await consumer.run(async (job) => {
 });
 ```
 
+## Key prefix
+
+Set ioredis' `keyPrefix` on `redisConfig` to isolate multiple xque
+deployments sharing the same redis database. The prefix is applied to every
+redis key, including those built inside xque's Lua scripts. A producer and
+consumer must use the same `keyPrefix` to see each other's jobs.
+
+```js
+const redisConfig = { host: 'localhost', port: 6379, db: 0, keyPrefix: 'myapp:' };
+
+const producer = await createProducer({ redisConfig });
+const consumer = createConsumer({ redisConfig, queueName: 'myQueue' });
+
+// Redis keys become e.g. myapp:xque:jobs, myapp:xque:queue:myQueue, ...
+```
+
 ## Semantic Versioning
 
-Topscript is using Semantic Versioning: [SemVer](http://semver.org/)
+xque is using Semantic Versioning: [SemVer](http://semver.org/)
 
 ## Contributing
 
