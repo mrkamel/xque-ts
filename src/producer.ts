@@ -2,35 +2,39 @@ import { Redis, RedisOptions } from 'ioredis';
 import { v7 as timeUuid } from 'uuid';
 import { Job } from './types';
 
-export async function createProducer({ redisConfig, commandTimeout = 1_000 }: { redisConfig: RedisOptions, commandTimeout?: number }) {
+export async function createProducer(
+  { redisConfig, commandTimeout = 1_000, keyPrefix = '' }:
+  { redisConfig: RedisOptions, commandTimeout?: number, keyPrefix?: string }
+) {
   const redis = new Redis({ commandTimeout, ...redisConfig });
+  const prefix = keyPrefix ? `${keyPrefix}:xque` : 'xque';
 
   async function enqueue(queueName: string, data: any, { expiry = 3_600_000, priority = 0 }: { expiry?: number, priority?: number } = {}) {
     const job: Job = { jid: timeUuid(), expiry, data };
 
     const enqueueScript = `
-      local queue_name, jid, job, priority = ARGV[1], ARGV[2], ARGV[3], tonumber(ARGV[4])
+      local prefix, queue_name, jid, job, priority = ARGV[1], ARGV[2], ARGV[3], ARGV[4], tonumber(ARGV[5])
 
-      redis.call('hset', 'xque:jobs', jid, job)
+      redis.call('hset', prefix .. ':jobs', jid, job)
 
-      local sequence_number = redis.call('incr', 'xque:seq:' .. queue_name)
+      local sequence_number = redis.call('incr', prefix .. ':seq:' .. queue_name)
       local score = -priority * (2^50) + sequence_number
 
-      redis.call('zadd', 'xque:queue:' .. queue_name, score, jid)
-      redis.call('lpush', 'xque:notifications:' .. queue_name, 1)
+      redis.call('zadd', prefix .. ':queue:' .. queue_name, score, jid)
+      redis.call('lpush', prefix .. ':notifications:' .. queue_name, 1)
     `;
 
-    await redis.eval(enqueueScript, 0, [queueName, job.jid, JSON.stringify(job), priority.toString()]);
+    await redis.eval(enqueueScript, 0, [prefix, queueName, job.jid, JSON.stringify(job), priority.toString()]);
 
     return job.jid;
   }
 
   async function queueSize(queueName: string) {
-    return await redis.zcard(`xque:queue:${queueName}`);
+    return await redis.zcard(`${prefix}:queue:${queueName}`);
   }
 
   async function pendingSize(queueName: string) {
-    return await redis.zcard(`xque:pending:${queueName}`);
+    return await redis.zcard(`${prefix}:pending:${queueName}`);
   }
 
   async function size(queueName: string) {
@@ -38,19 +42,19 @@ export async function createProducer({ redisConfig, commandTimeout = 1_000 }: { 
   }
 
   async function findJob(jid: string) {
-    const job = await redis.hget('xque:jobs', jid);
+    const job = await redis.hget(`${prefix}:jobs`, jid);
 
     return job ? JSON.parse(job) : null;
   }
 
   async function pendingTime(queueName: string, jid: string) {
     const pendingTimeScript = `
-      local queue_name, jid = ARGV[1], ARGV[2]
+      local prefix, queue_name, jid = ARGV[1], ARGV[2], ARGV[3]
 
-      return { redis.call('time')[1], redis.call('zscore', 'xque:pending:' .. queue_name, jid) }
+      return { redis.call('time')[1], redis.call('zscore', prefix .. ':pending:' .. queue_name, jid) }
     `;
 
-    const [time, score] = await redis.eval(pendingTimeScript, 0, [queueName, jid]) as [number, string | null];
+    const [time, score] = await redis.eval(pendingTimeScript, 0, [prefix, queueName, jid]) as [number, string | null];
 
     if (time === null || score === null) return null;
 
@@ -65,7 +69,7 @@ export async function createProducer({ redisConfig, commandTimeout = 1_000 }: { 
       cursor = newCursor;
 
       for (const item of items) {
-        const job = await redis.hget('xque:jobs', item);
+        const job = await redis.hget(`${prefix}:jobs`, item);
         if (!job) continue;
 
         await fn(JSON.parse(job) as Job);
@@ -74,11 +78,11 @@ export async function createProducer({ redisConfig, commandTimeout = 1_000 }: { 
   }
 
   async function scanQueue(queueName: string, fn: (job: Job) => Promise<void>) {
-    await zscanKey(`xque:queue:${queueName}`, fn);
+    await zscanKey(`${prefix}:queue:${queueName}`, fn);
   }
 
   async function scanPending(queueName: string, fn: (job: Job) => Promise<void>) {
-    await zscanKey(`xque:pending:${queueName}`, fn);
+    await zscanKey(`${prefix}:pending:${queueName}`, fn);
   }
 
   async function scan(queueName: string, fn: (job: Job) => Promise<void>) {

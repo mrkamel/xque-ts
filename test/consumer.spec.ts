@@ -270,6 +270,74 @@ describe('consumer', () => {
     });
   });
 
+  describe('keyPrefix', () => {
+    it('consumes jobs enqueued with the same keyPrefix', async () => {
+      const queueName = 'prefix-consume-queue';
+      const prefixedProducer = await createProducer({ redisConfig, keyPrefix: 'myapp' });
+      await prefixedProducer.enqueue(queueName, { task: 'prefixed' });
+      await prefixedProducer.stop();
+
+      const consumer = createConsumer({ redisConfig, queueName, keyPrefix: 'myapp', waitTime: 1 });
+      const processed: Job[] = [];
+
+      await consumer.runOnce(async (job) => { processed.push(job); });
+      await consumer.stop();
+
+      expect(processed).toHaveLength(1);
+      expect(processed[0].data).toEqual({ task: 'prefixed' });
+
+      expect(await redis.hlen('myapp:xque:jobs')).toBe(0);
+      expect(await redis.zcard(`myapp:xque:pending:${queueName}`)).toBe(0);
+    });
+
+    it('does not consume jobs from a different prefix', async () => {
+      const queueName = 'isolated-queue';
+      await producer.enqueue(queueName, { task: 'unprefixed' });
+
+      const consumer = createConsumer({ redisConfig, queueName, keyPrefix: 'other', waitTime: 1 });
+      const processed: Job[] = [];
+
+      await consumer.runOnce(async (job) => { processed.push(job); });
+      await consumer.stop();
+
+      expect(processed).toHaveLength(0);
+      expect(await redis.zcard(`xque:queue:${queueName}`)).toBe(1);
+    });
+
+    it('retries failed jobs under the configured prefix', async () => {
+      const queueName = 'prefix-retry-queue';
+      const prefixedProducer = await createProducer({ redisConfig, keyPrefix: 'myapp' });
+      await prefixedProducer.enqueue(queueName, { task: 'fail' });
+      await prefixedProducer.stop();
+
+      const consumer = createConsumer({
+        redisConfig,
+        queueName,
+        keyPrefix: 'myapp',
+        retries: 1,
+        backoffs: [50],
+        waitTime: 1,
+        logger: { error: vi.fn() },
+      });
+
+      let attempts = 0;
+
+      const jobProcessor = async () => {
+        attempts++;
+        throw new Error('error');
+      };
+
+      await consumer.runOnce(jobProcessor);
+      await sleep(60);
+      await consumer.runOnce(jobProcessor);
+      await consumer.stop();
+
+      expect(attempts).toBe(2);
+      expect(await redis.hlen('myapp:xque:jobs')).toBe(0);
+      expect(await redis.zcard(`myapp:xque:pending:${queueName}`)).toBe(0);
+    });
+  });
+
   describe('stop functionality', () => {
     it('stops gracefully when called', async () => {
       const consumer = createConsumer({ redisConfig, queueName: 'stop-queue', retries: 3 });

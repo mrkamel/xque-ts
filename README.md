@@ -34,9 +34,23 @@ await consumer.run(async (job) => {
 });
 ```
 
+## Key prefix
+
+Both `createProducer` and `createConsumer` accept an optional `keyPrefix` that
+is prepended to every redis key. This is useful to isolate multiple xque
+deployments sharing the same redis database. A producer and consumer must use
+the same `keyPrefix` to see each other's jobs.
+
+```js
+const producer = await createProducer({ redisConfig, keyPrefix: 'myapp' });
+const consumer = createConsumer({ redisConfig, queueName: 'myQueue', keyPrefix: 'myapp' });
+
+// Redis keys become e.g. myapp:xque:jobs, myapp:xque:queue:myQueue, ...
+```
+
 ## Semantic Versioning
 
-Topscript is using Semantic Versioning: [SemVer](http://semver.org/)
+xque is using Semantic Versioning: [SemVer](http://semver.org/)
 
 ## Contributing
 

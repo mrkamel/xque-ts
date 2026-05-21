@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createProducer } from '../src/producer';
 import { Redis, RedisOptions } from 'ioredis';
+import { Job } from '../src/types';
 
 describe('producer', () => {
   let producer: Awaited<ReturnType<typeof createProducer>>;
@@ -217,6 +218,65 @@ describe('producer', () => {
     it('handles invalid queue names', async () => {
       const result = await producer.enqueue('', { task: 'test' });
       expect(result).toBeDefined();
+    });
+  });
+
+  describe('keyPrefix', () => {
+    it('prepends keyPrefix to all redis keys', async () => {
+      const prefixedProducer = await createProducer({ redisConfig: { db: 1 }, keyPrefix: 'myapp' });
+      const queueName = 'prefix-queue';
+
+      try {
+        const jobId = await prefixedProducer.enqueue(queueName, { task: 'prefixed' });
+
+        expect(await redis.hget('myapp:xque:jobs', jobId)).not.toBeNull();
+        expect(await redis.zcard(`myapp:xque:queue:${queueName}`)).toBe(1);
+        expect(await redis.llen(`myapp:xque:notifications:${queueName}`)).toBe(1);
+        expect(await redis.exists(`myapp:xque:seq:${queueName}`)).toBe(1);
+
+        expect(await redis.exists('xque:jobs')).toBe(0);
+        expect(await redis.exists(`xque:queue:${queueName}`)).toBe(0);
+      } finally {
+        await prefixedProducer.stop();
+      }
+    });
+
+    it('isolates queues with different prefixes', async () => {
+      const producerA = await createProducer({ redisConfig: { db: 1 }, keyPrefix: 'appA' });
+      const producerB = await createProducer({ redisConfig: { db: 1 }, keyPrefix: 'appB' });
+      const queueName = 'shared-name';
+
+      try {
+        await producerA.enqueue(queueName, { task: 'A' });
+        await producerA.enqueue(queueName, { task: 'A2' });
+        await producerB.enqueue(queueName, { task: 'B' });
+
+        expect(await producerA.queueSize(queueName)).toBe(2);
+        expect(await producerB.queueSize(queueName)).toBe(1);
+      } finally {
+        await producerA.stop();
+        await producerB.stop();
+      }
+    });
+
+    it('findJob and scan respect keyPrefix', async () => {
+      const prefixedProducer = await createProducer({ redisConfig: { db: 1 }, keyPrefix: 'scoped' });
+      const queueName = 'scoped-queue';
+
+      try {
+        const jobId = await prefixedProducer.enqueue(queueName, { task: 'scoped-task' });
+
+        const found = await prefixedProducer.findJob(jobId);
+        expect(found).not.toBeNull();
+        expect(found!.data).toEqual({ task: 'scoped-task' });
+
+        const scanned: Job[] = [];
+        await prefixedProducer.scanQueue(queueName, async (job) => { scanned.push(job); });
+        expect(scanned).toHaveLength(1);
+        expect(scanned[0].jid).toBe(jobId);
+      } finally {
+        await prefixedProducer.stop();
+      }
     });
   });
 });
