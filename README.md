@@ -36,14 +36,16 @@ await consumer.run(async (job) => {
 
 ## Key prefix
 
-Both `createProducer` and `createConsumer` accept an optional `keyPrefix` that
-is prepended to every redis key. This is useful to isolate multiple xque
-deployments sharing the same redis database. A producer and consumer must use
-the same `keyPrefix` to see each other's jobs.
+Set ioredis' `keyPrefix` on `redisConfig` to isolate multiple xque
+deployments sharing the same redis database. The prefix is applied to every
+redis key, including those built inside xque's Lua scripts. A producer and
+consumer must use the same `keyPrefix` to see each other's jobs.
 
 ```js
-const producer = await createProducer({ redisConfig, keyPrefix: 'myapp' });
-const consumer = createConsumer({ redisConfig, queueName: 'myQueue', keyPrefix: 'myapp' });
+const redisConfig = { host: 'localhost', port: 6379, db: 0, keyPrefix: 'myapp:' };
+
+const producer = await createProducer({ redisConfig });
+const consumer = createConsumer({ redisConfig, queueName: 'myQueue' });
 
 // Redis keys become e.g. myapp:xque:jobs, myapp:xque:queue:myQueue, ...
 ```

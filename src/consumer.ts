@@ -7,11 +7,11 @@ const DEFAULT_BACKOFF = 60_000;
 const COMMAND_TIMEOUT = 30_000;
 
 export function createConsumer(
-  { redisConfig, queueName, waitTime = 5_000, retries = 3, backoffs = [30_000, 90_000, 270_000], logger = console, keyPrefix = '' }:
-  { redisConfig: RedisOptions; queueName: string, waitTime?: number, retries?: number, backoffs?: number[], logger?: Logger, keyPrefix?: string }
+  { redisConfig, queueName, waitTime = 5_000, retries = 3, backoffs = [30_000, 90_000, 270_000], logger = console }:
+  { redisConfig: RedisOptions; queueName: string, waitTime?: number, retries?: number, backoffs?: number[], logger?: Logger }
 ) {
   const redis = new Redis({ commandTimeout: COMMAND_TIMEOUT, ...redisConfig });
-  const prefix = keyPrefix ? `${keyPrefix}:xque` : 'xque';
+  const prefix = redisConfig.keyPrefix || '';
   let resolveStopPromise: (value: boolean | PromiseLike<boolean>) => void;
   let resolveStoppedPromise: (value: boolean | PromiseLike<boolean>) => void;
   let stopped = false;
@@ -29,7 +29,7 @@ export function createConsumer(
     const blockingRedis = new Redis({ commandTimeout: COMMAND_TIMEOUT, ...redisConfig });
 
     try {
-      await Promise.any([blockingRedis.brpop(`${prefix}:notifications:${queueName}`, waitTime / 1_000), sleep(waitTime + 1_000)]);
+      await Promise.any([blockingRedis.brpop(`xque:notifications:${queueName}`, waitTime / 1_000), sleep(waitTime + 1_000)]);
     } finally {
       blockingRedis.disconnect();
     }
@@ -43,19 +43,19 @@ export function createConsumer(
     const dequeueScript = `
       local prefix, queue_name = ARGV[1], ARGV[2]
 
-      local zitem = redis.call('zrange', prefix .. ':pending:' .. queue_name, 0, 0, 'WITHSCORES')
+      local zitem = redis.call('zrange', prefix .. 'xque:pending:' .. queue_name, 0, 0, 'WITHSCORES')
       local job_id = zitem[1]
 
       local time = redis.call('time')
       local time_float = tonumber(time[1]) + (tonumber(time[2]) / 1e6)
 
       if not zitem[2] or tonumber(zitem[2]) > time_float then
-        job_id = redis.call('zpopmin', prefix .. ':queue:' .. queue_name)[1]
+        job_id = redis.call('zpopmin', prefix .. 'xque:queue:' .. queue_name)[1]
       end
 
       if not job_id then return nil end
 
-      local job = redis.call('hget', prefix .. ':jobs', job_id)
+      local job = redis.call('hget', prefix .. 'xque:jobs', job_id)
 
       if not job then return nil end
 
@@ -64,7 +64,7 @@ export function createConsumer(
       time = redis.call('time')
       time_float = tonumber(time[1]) + (tonumber(time[2]) / 1e6)
 
-      redis.call('zadd', prefix .. ':pending:' .. queue_name, time_float + (object['expiry'] / 1e3), job_id)
+      redis.call('zadd', prefix .. 'xque:pending:' .. queue_name, time_float + (object['expiry'] / 1e3), job_id)
 
       return job
     `;
@@ -76,8 +76,8 @@ export function createConsumer(
     const deleteScript = `
       local prefix, queue_name, job_id = ARGV[1], ARGV[2], ARGV[3]
 
-      redis.call('hdel', prefix .. ':jobs', job_id)
-      redis.call('zrem', prefix .. ':pending:' .. queue_name, job_id)
+      redis.call('hdel', prefix .. 'xque:jobs', job_id)
+      redis.call('zrem', prefix .. 'xque:pending:' .. queue_name, job_id)
     `;
 
     return await redis.eval(deleteScript, 0, [prefix, queueName, parsedJob.jid]);
@@ -101,9 +101,9 @@ export function createConsumer(
       local time = redis.call('time')
       local time_float = tonumber(time[1]) + (tonumber(time[2]) / 1e6)
 
-      redis.call('hset', prefix .. ':jobs', job_id, job)
-      redis.call('zrem', prefix .. ':pending:' .. queue_name, job_id)
-      redis.call('zadd', prefix .. ':pending:' .. queue_name, time_float + (backoff / 1e3), job_id)
+      redis.call('hset', prefix .. 'xque:jobs', job_id, job)
+      redis.call('zrem', prefix .. 'xque:pending:' .. queue_name, job_id)
+      redis.call('zadd', prefix .. 'xque:pending:' .. queue_name, time_float + (backoff / 1e3), job_id)
     `;
 
     return await redis.eval(backoffScript, 0, [prefix, queueName, parsedJob.jid, updatedJob, backoff.toString()]);

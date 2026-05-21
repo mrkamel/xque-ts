@@ -270,14 +270,16 @@ describe('consumer', () => {
     });
   });
 
-  describe('keyPrefix', () => {
+  describe('redisConfig.keyPrefix', () => {
+    const prefixedConfig: RedisOptions = { db: 1, keyPrefix: 'prefix:' };
+
     it('consumes jobs enqueued with the same keyPrefix', async () => {
       const queueName = 'prefix-consume-queue';
-      const prefixedProducer = await createProducer({ redisConfig, keyPrefix: 'myapp' });
+      const prefixedProducer = await createProducer({ redisConfig: prefixedConfig });
       await prefixedProducer.enqueue(queueName, { task: 'prefixed' });
       await prefixedProducer.stop();
 
-      const consumer = createConsumer({ redisConfig, queueName, keyPrefix: 'myapp', waitTime: 1 });
+      const consumer = createConsumer({ redisConfig: prefixedConfig, queueName, waitTime: 1 });
       const processed: Job[] = [];
 
       await consumer.runOnce(async (job) => { processed.push(job); });
@@ -286,15 +288,15 @@ describe('consumer', () => {
       expect(processed).toHaveLength(1);
       expect(processed[0].data).toEqual({ task: 'prefixed' });
 
-      expect(await redis.hlen('myapp:xque:jobs')).toBe(0);
-      expect(await redis.zcard(`myapp:xque:pending:${queueName}`)).toBe(0);
+      expect(await redis.hlen('prefix:xque:jobs')).toBe(0);
+      expect(await redis.zcard(`prefix:xque:pending:${queueName}`)).toBe(0);
     });
 
     it('does not consume jobs from a different prefix', async () => {
       const queueName = 'isolated-queue';
       await producer.enqueue(queueName, { task: 'unprefixed' });
 
-      const consumer = createConsumer({ redisConfig, queueName, keyPrefix: 'other', waitTime: 1 });
+      const consumer = createConsumer({ redisConfig: { db: 1, keyPrefix: 'other:' }, queueName, waitTime: 1 });
       const processed: Job[] = [];
 
       await consumer.runOnce(async (job) => { processed.push(job); });
@@ -306,14 +308,13 @@ describe('consumer', () => {
 
     it('retries failed jobs under the configured prefix', async () => {
       const queueName = 'prefix-retry-queue';
-      const prefixedProducer = await createProducer({ redisConfig, keyPrefix: 'myapp' });
+      const prefixedProducer = await createProducer({ redisConfig: prefixedConfig });
       await prefixedProducer.enqueue(queueName, { task: 'fail' });
       await prefixedProducer.stop();
 
       const consumer = createConsumer({
-        redisConfig,
+        redisConfig: prefixedConfig,
         queueName,
-        keyPrefix: 'myapp',
         retries: 1,
         backoffs: [50],
         waitTime: 1,
@@ -333,8 +334,8 @@ describe('consumer', () => {
       await consumer.stop();
 
       expect(attempts).toBe(2);
-      expect(await redis.hlen('myapp:xque:jobs')).toBe(0);
-      expect(await redis.zcard(`myapp:xque:pending:${queueName}`)).toBe(0);
+      expect(await redis.hlen('prefix:xque:jobs')).toBe(0);
+      expect(await redis.zcard(`prefix:xque:pending:${queueName}`)).toBe(0);
     });
   });
 

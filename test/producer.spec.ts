@@ -221,18 +221,18 @@ describe('producer', () => {
     });
   });
 
-  describe('keyPrefix', () => {
+  describe('redisConfig.keyPrefix', () => {
     it('prepends keyPrefix to all redis keys', async () => {
-      const prefixedProducer = await createProducer({ redisConfig: { db: 1 }, keyPrefix: 'myapp' });
+      const prefixedProducer = await createProducer({ redisConfig: { db: 1, keyPrefix: 'prefix:' } });
       const queueName = 'prefix-queue';
 
       try {
         const jobId = await prefixedProducer.enqueue(queueName, { task: 'prefixed' });
 
-        expect(await redis.hget('myapp:xque:jobs', jobId)).not.toBeNull();
-        expect(await redis.zcard(`myapp:xque:queue:${queueName}`)).toBe(1);
-        expect(await redis.llen(`myapp:xque:notifications:${queueName}`)).toBe(1);
-        expect(await redis.exists(`myapp:xque:seq:${queueName}`)).toBe(1);
+        expect(await redis.hget('prefix:xque:jobs', jobId)).not.toBeNull();
+        expect(await redis.zcard(`prefix:xque:queue:${queueName}`)).toBe(1);
+        expect(await redis.llen(`prefix:xque:notifications:${queueName}`)).toBe(1);
+        expect(await redis.exists(`prefix:xque:seq:${queueName}`)).toBe(1);
 
         expect(await redis.exists('xque:jobs')).toBe(0);
         expect(await redis.exists(`xque:queue:${queueName}`)).toBe(0);
@@ -242,8 +242,8 @@ describe('producer', () => {
     });
 
     it('isolates queues with different prefixes', async () => {
-      const producerA = await createProducer({ redisConfig: { db: 1 }, keyPrefix: 'appA' });
-      const producerB = await createProducer({ redisConfig: { db: 1 }, keyPrefix: 'appB' });
+      const producerA = await createProducer({ redisConfig: { db: 1, keyPrefix: 'app1:' } });
+      const producerB = await createProducer({ redisConfig: { db: 1, keyPrefix: 'app2:' } });
       const queueName = 'shared-name';
 
       try {
@@ -259,8 +259,8 @@ describe('producer', () => {
       }
     });
 
-    it('findJob and scan respect keyPrefix', async () => {
-      const prefixedProducer = await createProducer({ redisConfig: { db: 1 }, keyPrefix: 'scoped' });
+    it('findJob and scan honor keyPrefix consistently across Lua and non-Lua calls', async () => {
+      const prefixedProducer = await createProducer({ redisConfig: { db: 1, keyPrefix: 'scoped:' } });
       const queueName = 'scoped-queue';
 
       try {
