@@ -65,8 +65,8 @@ export async function createProducer({ redisConfig, commandTimeout = 1_000 }: { 
       const [newCursor, items] = await redis.zscan(key, cursor, 'COUNT', 100);
       cursor = newCursor;
 
-      for (const item of items) {
-        const job = await redis.hget('xque:jobs', item);
+      for (let i = 0; i < items.length; i += 2) {
+        const job = await redis.hget('xque:jobs', items[i]);
         if (!job) continue;
 
         await fn(JSON.parse(job) as Job);

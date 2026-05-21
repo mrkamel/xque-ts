@@ -168,8 +168,8 @@ describe('producer', () => {
       });
 
       expect(scannedJobs).toHaveLength(2);
-      expect(scannedJobs.map(j => j.data)).toContainEqual(jobData1);
-      expect(scannedJobs.map(j => j.data)).toContainEqual(jobData2);
+      expect(scannedJobs.map(job => job.data)).toContainEqual(jobData1);
+      expect(scannedJobs.map(job => job.data)).toContainEqual(jobData2);
     });
 
     it('scans pending jobs', async () => {
@@ -208,7 +208,7 @@ describe('producer', () => {
       });
 
       expect(scannedJobs).toHaveLength(2);
-      const taskNames = scannedJobs.map(j => j.data.task);
+      const taskNames = scannedJobs.map(job => job.data.task);
       expect(taskNames).toContain('queued-job');
       expect(taskNames).toContain('pending-job');
     });
